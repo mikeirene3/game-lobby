@@ -1,111 +1,14 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Game Lobby</title>
-<style>
-  *{box-sizing:border-box} body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#0f172a;color:#e2e8f0}
-  .wrap{max-width:860px;margin:0 auto;padding:24px}
-  h1{margin:0 0 6px} .muted{color:#94a3b8;font-size:14px}
-  .card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:16px;margin-top:16px}
-  input,button{font:inherit} input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0}
-  button{padding:10px 14px;border-radius:10px;border:0;background:#2563eb;color:#fff;cursor:pointer} button.secondary{background:#334155}
-  .row{display:flex;gap:10px;flex-wrap:wrap} .row>*{flex:1}
-  .games{display:grid;gap:10px;margin-top:12px} .game{border:1px solid #1f2937;border-radius:12px;padding:12px;background:#0b1220}
-  code{background:#0b1220;padding:2px 6px;border-radius:6px} .ok{color:#22c55e} .err{color:#f87171;white-space:pre-wrap}
-</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Werewolf Night</title>
+<meta http-equiv="refresh" content="0; url=werewolf.html">
+<script>location.replace('werewolf.html');</script>
+<style>body{font-family:system-ui,sans-serif;margin:40px auto;max-width:480px;padding:0 20px;text-align:center}a{color:#c93a40}</style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Game Lobby</h1>
-  <div class="muted">Firebase Anonymous Auth + Firestore (<code>/games</code>) — live sync demo</div>
-
-  <div class="card">
-    <div id="status">Signing in…</div>
-    <div id="uid" class="muted" style="margin-top:6px"></div>
-    <div id="error" class="err" style="margin-top:8px"></div>
-  </div>
-
-  <div class="card">
-    <h3 style="margin:0 0 10px">Create a game</h3>
-    <div class="row">
-      <input id="gameName" placeholder="Game name (e.g. Friday Lobby)" />
-      <button id="createBtn" style="flex:0 0 auto">Create game</button>
-    </div>
-    <div class="muted" style="margin-top:8px">Creates a document in <code>games/{gameId}</code>.</div>
-  </div>
-
-  <div class="card">
-    <h3 style="margin:0 0 10px">Live games</h3>
-    <div id="games" class="games"></div>
-  </div>
-</div>
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-  import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
-  // Firebase web config — Game Lobby (game-lobby-14fb7), Spark free plan
-  const firebaseConfig = {
-    apiKey: "AIzaSyC69eRiBzlvQ6xU_8qBYCo-RJVk6P4Ecbg",
-    authDomain: "game-lobby-14fb7.firebaseapp.com",
-    projectId: "game-lobby-14fb7",
-    storageBucket: "game-lobby-14fb7.firebasestorage.app",
-    messagingSenderId: "919620933498",
-    appId: "1:919620933498:web:d5faafd2cd5f5d21e1a8c3"
-  };
-
-  const statusEl = document.getElementById('status');
-  const uidEl = document.getElementById('uid');
-  const errEl = document.getElementById('error');
-  const gamesEl = document.getElementById('games');
-  const createBtn = document.getElementById('createBtn');
-  const gameNameEl = document.getElementById('gameName');
-
-  function showError(e){ errEl.textContent = e ? (e.message || String(e)) : ""; console.error(e); }
-
-  let app, auth, db;
-  try {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-  } catch (e) { showError(e); }
-
-  onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      statusEl.innerHTML = '<span class="ok">● Connected</span> — anonymous user signed in';
-      uidEl.textContent = 'UID: ' + user.uid;
-      startListening();
-    } else {
-      try { await signInAnonymously(auth); } catch (e) { showError(e); statusEl.textContent = 'Sign-in failed. Check that Anonymous auth is enabled.'; }
-    }
-  });
-
-  function startListening(){
-    const q = query(collection(db, 'games'), orderBy('createdAt', 'desc'));
-    onSnapshot(q, (snap) => {
-      const items = [];
-      snap.forEach(d => items.push({ id: d.id, ...d.data() }));
-      if (!items.length) { gamesEl.innerHTML = '<div class="muted">No games yet. Create the first one above.</div>'; return; }
-      gamesEl.innerHTML = items.map(g => `
-        <div class="game">
-          <div><strong>${escapeHtml(g.name || 'Untitled game')}</strong></div>
-          <div class="muted">ID: <code>${g.id}</code> · Host: <code>${(g.hostUid||'').slice(0,8)}…</code></div>
-        </div>`).join('');
-    }, showError);
-  }
-
-  createBtn.addEventListener('click', async () => {
-    const name = (gameNameEl.value || '').trim() || 'Untitled game';
-    try {
-      await addDoc(collection(db, 'games'), { name, hostUid: auth.currentUser.uid, createdAt: serverTimestamp(), players: [auth.currentUser.uid] });
-      gameNameEl.value = '';
-    } catch (e) { showError(e); }
-  });
-
-  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-</script>
+<p>Heading to <a href="werewolf.html">🐺 Werewolf Night</a>…</p>
 </body>
 </html>

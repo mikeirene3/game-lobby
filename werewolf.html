@@ -59,7 +59,7 @@ go:async()=>{const s=ui.sel;ui.sel=[];await ui.go(s);if(ui.act)pd(uid).update({a
 fin:async()=>{const a=ui.act||{};ui={sel:[]};await pd(uid).update({done:true,act:a})},
 cnt:async v=>{const[r,d]=v.split(':'),c={...G.counts};c[r]=Math.max(0,(c[r]||0)+ +d);await gd().update({counts:c})},
 bot:async()=>{const n=all().filter(i=>i.startsWith('bot')).length+1;await pd('bot'+n).set({n:'Bot '+n})},
-start:async()=>{const l=shuf(Object.entries(G.counts).flatMap(([r,n])=>Array(n).fill(r))),p=all();if(p.length<3||l.length!=p.length+3)return;
+start:async()=>{const base=Object.entries(G.counts).flatMap(([r,n])=>Array(n).fill(r)),p=all();if(p.length<3||base.length!=p.length+3)return;let l,t=0;do{l=shuf([...base])}while(l.slice(p.length).filter(x=>x=='Werewolf').length>1&&++t<1000);
 await Promise.all(p.map((i,k)=>pd(i).set({n:P[i].n,r:l[k],f:l[k],done:false})));await gd().update({phase:'night',center:l.slice(p.length),nightEnd:Date.now()+30000})},
 vote:()=>gd().update({phase:'vote'}),
 again:async()=>{await Promise.all(all().map(i=>pd(i).set({n:P[i].n})));await gd().update({phase:'lobby'})}};

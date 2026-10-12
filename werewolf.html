@@ -25,7 +25,7 @@ const FIREBASE_CONFIG={apiKey:"AIzaSyC69eRiBzlvQ6xU_8qBYCo-RJVk6P4Ecbg",authDoma
 </head><body><div id="app"></div><script>
 const ROLES={Werewolf:'You see the other werewolf. Alone? You may peek at one center card.',Minion:'You see the werewolves. You win with them.',Mason:'You see the other Mason.',Seer:"Look at one player's card, or two center cards.",Robber:'Swap cards with a player and see your new role.',Troublemaker:"Swap two other players' cards. No peeking.",Drunk:'Swap with a center card. No peeking.',Insomniac:'At dawn you see your final card.',Villager:'Sleep tight. Find the wolves.',Tanner:'You win only if you are killed.',Hunter:'If you die, your vote kills too.'};
 const DEF={Werewolf:2,Seer:1,Robber:1,Troublemaker:1,Drunk:1,Insomniac:1,Villager:2,Minion:1,Mason:0,Tanner:0,Hunter:0};
-let db,uid,code,G=null,P={},name='',ui={sel:[]},tm=0,busy=0,sc=0,rn=0,real;
+let db,uid,code,G=null,P={},name='',ui={sel:[]},tm=0,busy=0,sc=0,rn=0,rv=0,rd=0,av=new Set(),real;
 const app=document.getElementById('app'),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const gd=()=>db.doc('games/'+code),pc=()=>db.collection('games/'+code+'/players'),pd=i=>db.doc('games/'+code+'/players/'+i);
 const ids=()=>Object.keys(P).filter(i=>P[i].r),all=()=>Object.keys(P),me=()=>P[uid]||{},nm=i=>esc(P[i].n);
@@ -53,6 +53,8 @@ by('Troublemaker').forEach(i=>{const t=A(i).tm;if(t&&t.length==2){[f[t[0]],f[t[1
 by('Drunk').forEach(i=>{const k=A(i).dr;if(k!=null){[f[i],c[k]]=[c[k],f[i]];L.push('Drunk '+N(i)+' swapped with center card '+(k+1))}});
 by('Insomniac').forEach(i=>L.push('Insomniac '+N(i)+' saw their final card: '+f[i]));
 await Promise.all(a.map(i=>pd(i).update({f:f[i]})));await gd().update({phase:'day',fc:c,log:L,deadline:Date.now()+(G.mins||5)*60000});busy=0}
+if(G.phase=='day'&&a.length&&(a.filter(i=>P[i].cv).length>=Math.ceil(a.length/2)||Date.now()>=G.deadline)&&rd!=G.deadline){busy=1;rd=G.deadline;await gd().update({phase:'vote',voteEnd:Date.now()+10000});busy=0}
+if(G.phase=='vote'&&a.length&&Date.now()>=G.voteEnd+3000&&!a.every(i=>P[i].v)&&rv!=G.voteEnd){busy=1;rv=G.voteEnd;await Promise.all(a.filter(i=>!P[i].v).map(i=>{const o=a.filter(x=>x!=i);return pd(i).update({v:o[Math.random()*o.length|0]})}));busy=0}
 if(G.phase=='vote'&&a.length&&a.every(i=>P[i].v)){busy=1;await gd().update({phase:'done',scored:false});busy=0}}
 const A={sel:v=>{if(ui.sel.includes(v))ui.sel=ui.sel.filter(x=>x!=v);else{ui.sel.push(v);if(ui.sel.length>ui.n)ui.sel.shift()}draw()},
 go:async()=>{const s=ui.sel;ui.sel=[];await ui.go(s);if(ui.act)pd(uid).update({act:ui.act});draw()},mode:v=>{ui.mode=v;draw()},
@@ -61,7 +63,7 @@ cnt:async v=>{const[r,d]=v.split(':'),c={...G.counts};c[r]=Math.max(0,(c[r]||0)+
 bot:async()=>{const n=all().filter(i=>i.startsWith('bot')).length+1;await pd('bot'+n).set({n:'Bot '+n})},
 start:async()=>{const base=Object.entries(G.counts).flatMap(([r,n])=>Array(n).fill(r)),p=all();if(p.length<3||base.length!=p.length+3)return;let l,t=0;do{l=shuf([...base])}while(l.slice(p.length).filter(x=>x=='Werewolf').length>1&&++t<1000);
 await Promise.all(p.map((i,k)=>pd(i).set({n:P[i].n,r:l[k],f:l[k],done:false})));await gd().update({phase:'night',center:l.slice(p.length),nightEnd:Date.now()+30000})},
-vote:()=>gd().update({phase:'vote'}),
+cv:()=>pd(uid).update({cv:!me().cv}),
 again:async()=>{await Promise.all(all().map(i=>pd(i).set({n:P[i].n})));await gd().update({phase:'lobby'})}};
 app.onclick=e=>{const b=e.target.closest('[data-a]');if(b&&!b.disabled)A[b.dataset.a](b.dataset.v)};
 function pick(items,n,go,lab){ui.n=n;ui.go=go;return`<div class="g">${items.map(([k,l])=>`<button data-a="sel" data-v="${k}" class="${ui.sel.includes(k)?'on':'s'}">${l}</button>`).join('')}</div><button data-a="go" ${ui.sel.length==n?'':'disabled'}>${lab||'Confirm'}</button>`}
@@ -87,10 +89,11 @@ else if(r=='Troublemaker')h+=ui.seen?seen():pick(oi,2,s=>{ui.seen='Swapped '+P[s
 else if(r=='Drunk')h+=ui.seen?seen():pick(cen,1,s=>{ui.seen='Swapped with a center card. No peeking!';ui.act={dr:+s[0][1]}},'Swap');
 else h+='<p class="m">No night action for your role. Tap a player anyway so you look busy.</p>'+pick(oi,1,()=>A.fin(),'Done');app.innerHTML=h;nt()}
 function day(){const m=me(),ins=m.r=='Insomniac'?`<p>Your final card: <b>${m.f}</b></p>`:'';
-app.innerHTML=`<h2>☀️ Discuss!</h2><div class="big" id="t"></div><p class="m">${ic(m.r,28)} You started as <b>${m.r||'?'}</b>. Talk it out loud.</p>${ins}${G.host==real?'<button data-a="vote">Call the vote</button>':'<p class="m">Host calls the vote.</p>'}`;
+app.innerHTML=`<h2>☀️ Discuss!</h2><div class="big" id="t"></div><p class="m">${ic(m.r,28)} You started as <b>${m.r||'?'}</b>. Talk it out loud.</p>${ins}${m.r?`<button data-a="cv" class="${m.cv?'on':''}">${m.cv?'✓ You called the vote':'Call the vote'} (${ids().filter(i=>P[i].cv).length}/${Math.ceil(ids().length/2)})</button><p class="m">Voting starts when the timer hits 0:00, or earlier if at least half the players call it. Tap again to take it back.</p>`:''}`;
 const t=()=>{const s=Math.max(0,Math.round((G.deadline-Date.now())/1000)),e=document.getElementById('t');if(e)e.textContent=(s/60|0)+':'+String(s%60).padStart(2,'0')};t();tm=setInterval(t,1000)}
+const vt=()=>{const t=()=>{const s=Math.max(0,Math.round((G.voteEnd-Date.now())/1000)),e=document.getElementById('t');if(e)e.textContent='🗳️ '+s+'s';const k=uid+G.voteEnd;if(Date.now()>=G.voteEnd&&!me().v&&me().r&&!av.has(k)){av.add(k);const o=ids().filter(i=>i!=uid);pd(uid).update({v:o.includes(ui.sel[0])?ui.sel[0]:o[Math.random()*o.length|0]})}};t();tm=setInterval(t,500)};
 function vote(){const m=me();if(!m.r)return app.innerHTML='<p>Spectating this round.</p>';const a=ids();
-app.innerHTML=m.v?`<h2>Vote locked</h2><p class="m">Waiting… ${a.filter(i=>P[i].v).length}/${a.length}</p>`:`<h2>🗳️ Who dies?</h2>`+pick(a.filter(i=>i!=uid).map(i=>[i,nm(i)]),1,s=>pd(uid).update({v:s[0]}),'Lock vote')}
+app.innerHTML=`<div class="big" id="t"></div>`+(m.v?`<h2>Vote locked</h2><p class="m">Waiting… ${a.filter(i=>P[i].v).length}/${a.length}</p>`:`<h2>🗳️ Who dies?</h2><p class="m">Pick someone. When time runs out your current pick counts; no pick means a random vote.</p>`+pick(a.filter(i=>i!=uid).map(i=>[i,nm(i)]),1,s=>pd(uid).update({v:s[0]}),'Lock vote'));vt()}
 function done(){const a=ids(),n={};a.forEach(i=>n[P[i].v]=(n[P[i].v]||0)+1);const mx=Math.max(...Object.values(n),0);let dead=new Set(mx>1?a.filter(i=>n[i]==mx):[]);
 [...dead].forEach(i=>{if(P[i].f=='Hunter'&&P[P[i].v])dead.add(P[i].v)});const dr=[...dead].map(i=>P[i].f),wolves=a.some(i=>P[i].f=='Werewolf'),wd=dr.includes('Werewolf'),td=dr.includes('Tanner'),
 res=[td&&'Tanner wins!',(wd||(!wolves&&!dead.size))&&'Village wins!',wolves&&!wd&&!td&&'Werewolves win!'].filter(Boolean);
